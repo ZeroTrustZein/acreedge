@@ -69,6 +69,26 @@ def test_clean_deed_record_normalization():
     assert clean.sale_price == 2450000.0
     assert clean.is_arms_length is True
 
+    # Date object directly
+    clean_date_obj = CleanDeedRecord(
+        parcel_id="100-204-55A",
+        grantor="Seller Corp",
+        grantee="Buyer LLC",
+        sale_date=date(2026, 4, 15),
+        sale_price=100000.0,
+    )
+    assert clean_date_obj.sale_date == date(2026, 4, 15)
+
+    # ISO timestamp with 'T'
+    clean_iso_t = CleanDeedRecord(
+        parcel_id="100-204-55A",
+        grantor="Seller Corp",
+        grantee="Buyer LLC",
+        sale_date="2026-04-15T09:30:00Z",
+        sale_price=100000.0,
+    )
+    assert clean_iso_t.sale_date == date(2026, 4, 15)
+
 
 def test_clean_deed_record_validation_errors():
     """Verify invalid fields trigger validation errors."""
@@ -78,6 +98,15 @@ def test_clean_deed_record_validation_errors():
             grantor="Seller",
             grantee="Buyer",
             sale_date="2026-04-15",
+            sale_price=100.0,
+        )
+
+    with pytest.raises(PydanticValidationError):
+        CleanDeedRecord(
+            parcel_id="100-ABC",
+            grantor="Seller",
+            grantee="Buyer",
+            sale_date=12345,  # Non-string, non-date type
             sale_price=100.0,
         )
 

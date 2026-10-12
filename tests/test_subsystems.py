@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+import pytest
+
 from acreedge.config import AcreEdgeSettings
 from acreedge.db.manager import DatabaseManager
 from acreedge.db.sql_validator import SQLRawExportValidator
@@ -182,3 +184,64 @@ def test_mcp_server_call_tool(mcp_server: AcreEdgeMCPServer):
     bad_result = mcp_server.call_tool(bad_call)
     assert bad_result.is_error is True
     assert "Cap rate must be greater than zero" in str(bad_result.content)
+
+    # Test unregistered tool
+    with pytest.raises(KeyError):
+        mcp_server.execute_tool("unknown_tool", {})
+
+    # Test query_validated_deeds tool
+    deeds_call = MCPToolCall(name="query_validated_deeds", arguments={"parcel_id": "P-101"})
+    deeds_res = mcp_server.call_tool(deeds_call)
+    assert deeds_res.is_error is False
+    assert deeds_res.content["parcel_id"] == "P-101"
+
+    # Test underwrite_property tool
+    uw_call = MCPToolCall(
+        name="underwrite_property",
+        arguments={"parcel_id": "P-101", "purchase_price": 2000000.0},
+    )
+    uw_res = mcp_server.call_tool(uw_call)
+    assert uw_res.is_error is False
+    assert uw_res.content["purchase_price"] == 2000000.0
+
+
+def test_db_manager_autoconnect_paths():
+    """Verify DatabaseManager connects automatically when disconnected."""
+    mgr = DatabaseManager()
+    assert mgr.is_connected() is False
+    assert mgr.initialize_schema() is True
+    assert mgr.is_connected() is True
+
+    mgr.disconnect()
+    assert mgr.is_connected() is False
+    res = mgr.execute_query("SELECT 1;")
+    assert res == [{"status": 1}]
+    assert mgr.is_connected() is True
+
+
+def test_valuation_engine_dcf_invalid_discount():
+    """Verify ValuationEngine rejects discount rate <= -100%."""
+    engine = ValuationEngine()
+    with pytest.raises(ValueError, match="Discount rate cannot be <= -100%"):
+        engine.calculate_dcf([1000.0], discount_rate=-1.5)
+
+
+def test_swarm_orchestrator_rejection_flow(default_settings: AcreEdgeSettings):
+    """Verify SwarmOrchestrator handles non-APPROVED agent evaluations."""
+    from acreedge.agents.orchestrator import SwarmOrchestrator
+    from unittest.mock import MagicMock
+
+    orchestrator = SwarmOrchestrator(default_settings.swarm)
+    # Mock one agent to return REJECTED
+    mock_agent = MagicMock()
+    mock_agent.execute_task.return_value = {
+        "status": "REJECTED",
+        "agent_role": "RiskUnderwriter",
+        "findings": "Extreme environmental hazard detected",
+    }
+    orchestrator.register_agent(mock_agent)
+
+    report = orchestrator.run_due_diligence_report("PARCEL-RISK")
+    assert report.status == UnderwritingStatus.REJECTED
+    assert report.overall_risk_score == 75.0
+
