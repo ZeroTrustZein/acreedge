@@ -64,8 +64,9 @@ class DatabaseManager:
         radius_miles: float = 5.0,
         table_name: str = "validated_deeds",
     ) -> str:
-        """Construct PostGIS spatial query for comparable arms-length deeds within radius in miles."""
+        """Construct PostGIS spatial query for comparable arms-length deeds."""
         radius_meters = radius_miles * 1609.344
+        point_geom = f"ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography"
         return (
             "SELECT\n"
             "    deed_id,\n"
@@ -76,9 +77,10 @@ class DatabaseManager:
             "    sale_price,\n"
             "    deed_type,\n"
             "    is_arms_length,\n"
-            f"    ROUND((ST_Distance(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography) / 1609.344)::numeric, 2) AS distance_miles\n"
+            f"    ROUND((ST_Distance(geom, {point_geom}) / 1609.344)::numeric, 2) "
+            "AS distance_miles\n"
             f"FROM {table_name}\n"
-            f"WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography, {radius_meters})\n"
+            f"WHERE ST_DWithin(geom, {point_geom}, {radius_meters})\n"
             "  AND is_arms_length = TRUE\n"
             "ORDER BY distance_miles ASC;\n"
         )
@@ -105,6 +107,8 @@ class DatabaseManager:
         if sql_stripped.startswith("SELECT 1") or sql_stripped == "SELECT 1;":
             return [{"status": 1}]
         if "COUNT(*)" in sql_stripped:
-            return [{"total_raw": 10, "total_validated": 8, "total_quarantined": 2, "pass_rate": 0.8}]
+            return [
+                {"total_raw": 10, "total_validated": 8, "total_quarantined": 2, "pass_rate": 0.8}
+            ]
 
         return []

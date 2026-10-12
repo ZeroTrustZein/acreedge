@@ -144,11 +144,13 @@ def test_valuation_engine(valuation_engine: ValuationEngine):
     cap_rate = valuation_engine.calculate_cap_rate(noi=60000.0, property_value=1000000.0)
     assert cap_rate == 0.06
 
-    val_res = valuation_engine.calculate_valuation({
-        "noi": 120000.0,
-        "cap_rate": 0.06,
-        "square_feet": 15000.0,
-    })
+    val_res = valuation_engine.calculate_valuation(
+        {
+            "noi": 120000.0,
+            "cap_rate": 0.06,
+            "square_feet": 15000.0,
+        }
+    )
     assert val_res["estimated_value"] == 2000000.0
     assert val_res["value_per_sqft"] == 133.33
 

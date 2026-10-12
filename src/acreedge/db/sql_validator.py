@@ -124,8 +124,11 @@ SELECT
         WHEN raw.parcel_id IS NULL OR TRIM(raw.parcel_id) = '' THEN 'MISSING_PARCEL_ID'
         WHEN raw.sale_date IS NULL OR TRIM(raw.sale_date) = '' THEN 'MISSING_SALE_DATE'
         WHEN raw.sale_price_raw IS NULL OR TRIM(raw.sale_price_raw) = '' THEN 'MISSING_SALE_PRICE'
-        WHEN REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') !~ '^[0-9]+(\\.[0-9]+)?$' THEN 'INVALID_PRICE_FORMAT'
-        WHEN CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) < {self.settings.min_sale_price} THEN 'PRICE_BELOW_MINIMUM'
+        WHEN REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g')
+             !~ '^[0-9]+(\\.[0-9]+)?$' THEN 'INVALID_PRICE_FORMAT'
+        WHEN CAST(
+            REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)
+        ) < {self.settings.min_sale_price} THEN 'PRICE_BELOW_MINIMUM'
         WHEN TRIM(UPPER(raw.grantor)) = TRIM(UPPER(raw.grantee)) THEN 'NON_ARMS_LENGTH_TRANSFER'
         ELSE 'VALIDATION_FAILED'
     END AS rejection_reason,
@@ -137,7 +140,9 @@ WHERE
     OR raw.sale_date IS NULL
     OR raw.sale_price_raw IS NULL
     OR REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') !~ '^[0-9]+(\\.[0-9]+)?$'
-    OR CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) < {self.settings.min_sale_price}
+    OR CAST(
+        REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)
+    ) < {self.settings.min_sale_price}
     OR TRIM(UPPER(raw.grantor)) = TRIM(UPPER(raw.grantee));
 """
 
@@ -169,6 +174,7 @@ SELECT
     ) -> str:
         """PostGIS spatial query to retrieve comparable arms-length deeds within radius."""
         radius_meters = radius_miles * 1609.344
+        pt = f"ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography"
         return f"""
 SELECT
     deed_id,
@@ -179,9 +185,9 @@ SELECT
     sale_price,
     deed_type,
     is_arms_length,
-    ROUND((ST_Distance(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography) / 1609.344)::numeric, 2) AS distance_miles
+    ROUND((ST_Distance(geom, {pt}) / 1609.344)::numeric, 2) AS distance_miles
 FROM {self.settings.clean_table}
-WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography, {radius_meters})
+WHERE ST_DWithin(geom, {pt}, {radius_meters})
   AND is_arms_length = TRUE
 ORDER BY distance_miles ASC;
 """

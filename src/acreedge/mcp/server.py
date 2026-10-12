@@ -6,6 +6,7 @@ import logging
 from typing import Any, Callable, Dict, Optional
 
 from acreedge.config import MCPSettings
+from acreedge.types import MCPToolCall, MCPToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,25 @@ class AcreEdgeMCPServer:
     def is_running(self) -> bool:
         """Return server run state."""
         return self._running
+
+    def execute_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a registered tool by name with arguments."""
+        if name not in self._tools:
+            raise KeyError(f"Tool '{name}' is not registered")
+        handler = self._tools[name]
+        return handler(**arguments)
+
+    def call_tool(self, call: MCPToolCall) -> MCPToolResult:
+        """Process structured MCPToolCall and return strongly-typed MCPToolResult."""
+        try:
+            result = self.execute_tool(call.name, call.arguments)
+            return MCPToolResult(tool=call.name, content=result, is_error=False)
+        except Exception as exc:
+            return MCPToolResult(
+                tool=call.name,
+                content=str(exc),
+                is_error=True,
+            )
 
     def _tool_calculate_valuation(self, noi: float, cap_rate: float) -> Dict[str, Any]:
         """Tool implementation for direct capitalization valuation."""

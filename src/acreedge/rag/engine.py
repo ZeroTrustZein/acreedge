@@ -30,11 +30,13 @@ class HybridRAGEngine:
 
     def add_graph_relation(self, source_entity: str, relation: str, target_entity: str) -> None:
         """Add knowledge graph edge between real estate entities (e.g. Parcel -> Grantor)."""
-        self._graph_edges.append({
-            "source": source_entity,
-            "relation": relation,
-            "target": target_entity,
-        })
+        self._graph_edges.append(
+            {
+                "source": source_entity,
+                "relation": relation,
+                "target": target_entity,
+            }
+        )
 
     def hybrid_search(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         """Simulate hybrid retrieval combining dense score and graph connectivity."""
@@ -43,14 +45,16 @@ class HybridRAGEngine:
 
         # Find matching entities or documents
         for doc_id, doc in list(self._doc_index.items())[:k]:
-            results.append({
-                "doc_id": doc_id,
-                "content": doc["content"],
-                "score": 0.88,
-                "graph_neighbors": [
-                    edge["target"] for edge in self._graph_edges if edge["source"] == doc_id
-                ],
-            })
+            results.append(
+                {
+                    "doc_id": doc_id,
+                    "content": doc["content"],
+                    "score": 0.88,
+                    "graph_neighbors": [
+                        edge["target"] for edge in self._graph_edges if edge["source"] == doc_id
+                    ],
+                }
+            )
         return results
 
     def get_chain_of_title(self, parcel_id: str) -> List[Dict[str, Any]]:
