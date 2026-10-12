@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Union
 
-from acreedge.types import DCFAnalysis, ValuationInput, ValuationResult
+from acreedge.types import CleanDeedRecord, DCFAnalysis, ValuationInput, ValuationResult
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,33 @@ class ValuationEngine:
         if property_value <= 0:
             raise ValueError("Property value must be greater than zero")
         return round(noi / property_value, 4)
+
+    def calculate_comps_valuation(
+        self,
+        comps: List[Union[Dict[str, Any], CleanDeedRecord]],
+        target_sqft: float = 1.0,
+    ) -> Dict[str, Any]:
+        """Estimate valuation based on sales comparables."""
+        if not comps:
+            return {"estimated_value": 0.0, "comp_count": 0, "avg_price": 0.0}
+
+        prices: List[float] = []
+        for comp in comps:
+            if isinstance(comp, CleanDeedRecord):
+                prices.append(float(comp.sale_price))
+            elif isinstance(comp, dict):
+                prices.append(float(comp.get("sale_price", 0.0)))
+
+        valid_prices = [p for p in prices if p > 0]
+        if not valid_prices:
+            return {"estimated_value": 0.0, "comp_count": 0, "avg_price": 0.0}
+
+        avg_price = sum(valid_prices) / len(valid_prices)
+        return {
+            "estimated_value": round(avg_price, 2),
+            "comp_count": len(valid_prices),
+            "avg_price": round(avg_price, 2),
+        }
 
     def calculate_valuation(
         self, property_data: Union[Dict[str, Any], ValuationInput]
@@ -32,16 +59,24 @@ class ValuationEngine:
         target_cap_rate = float(data.get("cap_rate", 0.065))
         square_feet = float(data.get("square_feet", 1.0))
         parcel_id = str(data.get("parcel_id", "UNKNOWN"))
+        comps = data.get("comps", [])
 
         if target_cap_rate <= 0:
             target_cap_rate = 0.065
 
-        cap_rate_valuation = noi / target_cap_rate if noi > 0 else 0.0
-        val_per_sqft = cap_rate_valuation / square_feet if square_feet > 0 else 0.0
+        if noi > 0:
+            estimated_value = noi / target_cap_rate
+        elif comps:
+            comps_res = self.calculate_comps_valuation(comps, square_feet)
+            estimated_value = comps_res["estimated_value"]
+        else:
+            estimated_value = 0.0
+
+        val_per_sqft = estimated_value / square_feet if square_feet > 0 else 0.0
 
         return {
             "parcel_id": parcel_id,
-            "estimated_value": round(cap_rate_valuation, 2),
+            "estimated_value": round(estimated_value, 2),
             "noi": round(noi, 2),
             "cap_rate": round(target_cap_rate, 4),
             "value_per_sqft": round(val_per_sqft, 2),

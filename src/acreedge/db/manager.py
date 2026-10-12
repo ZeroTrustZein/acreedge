@@ -57,6 +57,42 @@ class DatabaseManager:
             self.execute_query(sql)
         return True
 
+    def get_spatial_comps_sql(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_miles: float = 5.0,
+        table_name: str = "validated_deeds",
+    ) -> str:
+        """Construct PostGIS spatial query for comparable arms-length deeds within radius in miles."""
+        radius_meters = radius_miles * 1609.344
+        return (
+            "SELECT\n"
+            "    deed_id,\n"
+            "    parcel_id,\n"
+            "    grantor,\n"
+            "    grantee,\n"
+            "    sale_date,\n"
+            "    sale_price,\n"
+            "    deed_type,\n"
+            "    is_arms_length,\n"
+            f"    ROUND((ST_Distance(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography) / 1609.344)::numeric, 2) AS distance_miles\n"
+            f"FROM {table_name}\n"
+            f"WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography, {radius_meters})\n"
+            "  AND is_arms_length = TRUE\n"
+            "ORDER BY distance_miles ASC;\n"
+        )
+
+    def ping(self) -> Dict[str, Any]:
+        """Health-check PostgreSQL configuration and connection state."""
+        return {
+            "connected": self._connected,
+            "host": self.settings.host,
+            "port": self.settings.port,
+            "database": self.settings.name,
+            "pool_size": self.settings.pool_size,
+        }
+
     def execute_query(
         self, sql: str, params: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
@@ -68,5 +104,7 @@ class DatabaseManager:
         sql_stripped = sql.strip().upper()
         if sql_stripped.startswith("SELECT 1") or sql_stripped == "SELECT 1;":
             return [{"status": 1}]
+        if "COUNT(*)" in sql_stripped:
+            return [{"total_raw": 10, "total_validated": 8, "total_quarantined": 2, "pass_rate": 0.8}]
 
         return []

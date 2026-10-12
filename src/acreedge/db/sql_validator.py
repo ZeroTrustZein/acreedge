@@ -53,6 +53,17 @@ CREATE INDEX IF NOT EXISTS idx_{self.settings.clean_table}_parcel
     ON {self.settings.clean_table}(parcel_id);
 CREATE INDEX IF NOT EXISTS idx_{self.settings.clean_table}_date
     ON {self.settings.clean_table}(sale_date);
+
+CREATE TABLE IF NOT EXISTS {self.settings.quarantine_table} (
+    quarantine_id BIGSERIAL PRIMARY KEY,
+    raw_id BIGINT,
+    parcel_id VARCHAR(64),
+    rejection_reason VARCHAR(255),
+    raw_payload JSONB,
+    quarantined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_{self.settings.quarantine_table}_parcel
+    ON {self.settings.quarantine_table}(parcel_id);
 """
 
     def generate_validation_sql(self) -> str:
@@ -95,6 +106,84 @@ WHERE
         REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)
     ) >= {self.settings.min_sale_price}
 ON CONFLICT DO NOTHING;
+"""
+
+    def generate_quarantine_sql(self) -> str:
+        """PostgreSQL query to isolate and log invalid raw export records."""
+        return f"""
+INSERT INTO {self.settings.quarantine_table} (
+    raw_id,
+    parcel_id,
+    rejection_reason,
+    raw_payload
+)
+SELECT
+    raw.raw_id,
+    raw.parcel_id,
+    CASE
+        WHEN raw.parcel_id IS NULL OR TRIM(raw.parcel_id) = '' THEN 'MISSING_PARCEL_ID'
+        WHEN raw.sale_date IS NULL OR TRIM(raw.sale_date) = '' THEN 'MISSING_SALE_DATE'
+        WHEN raw.sale_price_raw IS NULL OR TRIM(raw.sale_price_raw) = '' THEN 'MISSING_SALE_PRICE'
+        WHEN REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') !~ '^[0-9]+(\\.[0-9]+)?$' THEN 'INVALID_PRICE_FORMAT'
+        WHEN CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) < {self.settings.min_sale_price} THEN 'PRICE_BELOW_MINIMUM'
+        WHEN TRIM(UPPER(raw.grantor)) = TRIM(UPPER(raw.grantee)) THEN 'NON_ARMS_LENGTH_TRANSFER'
+        ELSE 'VALIDATION_FAILED'
+    END AS rejection_reason,
+    TO_JSONB(raw) AS raw_payload
+FROM {self.settings.raw_export_table} raw
+WHERE
+    raw.parcel_id IS NULL
+    OR TRIM(raw.parcel_id) = ''
+    OR raw.sale_date IS NULL
+    OR raw.sale_price_raw IS NULL
+    OR REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') !~ '^[0-9]+(\\.[0-9]+)?$'
+    OR CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) < {self.settings.min_sale_price}
+    OR TRIM(UPPER(raw.grantor)) = TRIM(UPPER(raw.grantee));
+"""
+
+    def generate_audit_sql(self) -> str:
+        """PostgreSQL query computing batch cleaning audit metrics."""
+        return f"""
+SELECT
+    (SELECT COUNT(*) FROM {self.settings.raw_export_table}) AS total_raw,
+    (SELECT COUNT(*) FROM {self.settings.clean_table}) AS total_validated,
+    (SELECT COUNT(*) FROM {self.settings.quarantine_table}) AS total_quarantined,
+    ROUND(
+        (SELECT COUNT(*)::NUMERIC FROM {self.settings.clean_table}) /
+        NULLIF((SELECT COUNT(*)::NUMERIC FROM {self.settings.raw_export_table}), 0),
+        4
+    ) AS pass_rate;
+"""
+
+    def build_pipeline_sql(self) -> str:
+        """Assemble full transactional cleaning and quarantine workflow in PostgreSQL."""
+        return (
+            "BEGIN;\n"
+            f"{self.generate_validation_sql().strip()}\n"
+            f"{self.generate_quarantine_sql().strip()}\n"
+            "COMMIT;\n"
+        )
+
+    def generate_spatial_comps_sql(
+        self, latitude: float, longitude: float, radius_miles: float = 5.0
+    ) -> str:
+        """PostGIS spatial query to retrieve comparable arms-length deeds within radius."""
+        radius_meters = radius_miles * 1609.344
+        return f"""
+SELECT
+    deed_id,
+    parcel_id,
+    grantor,
+    grantee,
+    sale_date,
+    sale_price,
+    deed_type,
+    is_arms_length,
+    ROUND((ST_Distance(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography) / 1609.344)::numeric, 2) AS distance_miles
+FROM {self.settings.clean_table}
+WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography, {radius_meters})
+  AND is_arms_length = TRUE
+ORDER BY distance_miles ASC;
 """
 
     def clean_record(self, record: Dict[str, Any]) -> Optional[Dict[str, Any]]:

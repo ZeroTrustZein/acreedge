@@ -48,6 +48,7 @@ class IngestionSettings(BaseModel):
 
     raw_export_table: str = Field(default="raw_municipal_deeds", description="Staging table name")
     clean_table: str = Field(default="validated_deeds", description="Validated table name")
+    quarantine_table: str = Field(default="quarantined_deeds", description="Quarantine table name")
     batch_size: int = Field(default=1000, description="Batch insert size")
     min_sale_price: float = Field(default=100.0, description="Threshold for valid deed transfers")
     require_parcel_id: bool = Field(default=True, description="Enforce parcel identifier")

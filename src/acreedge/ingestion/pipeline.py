@@ -6,7 +6,9 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from acreedge.config import IngestionSettings
+from acreedge.db.manager import DatabaseManager
 from acreedge.db.sql_validator import SQLRawExportValidator
+from acreedge.types import RawDeedRecord, ValidationBatchResult
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +16,13 @@ logger = logging.getLogger(__name__)
 class MunicipalDeedIngestionPipeline:
     """Pipelines raw municipal deed exports through PostgreSQL SQL validation and normalization."""
 
-    def __init__(self, settings: Optional[IngestionSettings] = None) -> None:
+    def __init__(
+        self,
+        settings: Optional[IngestionSettings] = None,
+        db_manager: Optional[DatabaseManager] = None,
+    ) -> None:
         self.settings = settings or IngestionSettings()
+        self.db_manager = db_manager
         self.validator = SQLRawExportValidator(self.settings)
 
     def ingest_raw_export(self, source_path: str) -> Dict[str, Any]:
@@ -26,8 +33,16 @@ class MunicipalDeedIngestionPipeline:
     def run_cleaning_pipeline(self) -> Dict[str, Any]:
         """Execute PostgreSQL cleaning query on staged raw export."""
         sql = self.get_ingestion_sql()
+        pipeline_sql = self.validator.build_pipeline_sql()
+        if self.db_manager:
+            self.db_manager.execute_query(pipeline_sql)
         logger.info("Executing cleaning and validation pipeline via PostgreSQL SQL")
-        return {"status": "SUCCESS", "sql_applied": True, "sql": sql}
+        return {
+            "status": "SUCCESS",
+            "sql_applied": True,
+            "sql": sql,
+            "pipeline_sql": pipeline_sql,
+        }
 
     def process_records(self, raw_records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Process and validate raw municipal records."""
@@ -38,6 +53,16 @@ class MunicipalDeedIngestionPipeline:
         )
         return result
 
+    def process_batch_models(
+        self, records: List[Dict[str, Any] | RawDeedRecord]
+    ) -> ValidationBatchResult:
+        """Process and return structured ValidationBatchResult with CleanDeedRecord models."""
+        return self.validator.validate_batch_models(records)
+
     def get_ingestion_sql(self) -> str:
         """Returns the PostgreSQL SQL script to clean and stage the raw export."""
         return self.validator.generate_validation_sql()
+
+    def get_pipeline_sql(self) -> str:
+        """Returns the complete transactional pipeline SQL script."""
+        return self.validator.build_pipeline_sql()

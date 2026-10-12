@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from acreedge.config import RAGSettings
+from acreedge.types import RAGSearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -51,3 +52,25 @@ class HybridRAGEngine:
                 ],
             })
         return results
+
+    def get_chain_of_title(self, parcel_id: str) -> List[Dict[str, Any]]:
+        """Retrieve historical ownership and conveyance edges for a parcel."""
+        return [
+            edge
+            for edge in self._graph_edges
+            if edge["source"] == parcel_id or edge["target"] == parcel_id
+        ]
+
+    def search_models(self, query: str, top_k: Optional[int] = None) -> List[RAGSearchResult]:
+        """Hybrid search returning typed RAGSearchResult schemas."""
+        hits = self.hybrid_search(query, top_k)
+        return [
+            RAGSearchResult(
+                doc_id=h["doc_id"],
+                content=h["content"],
+                score=h["score"],
+                graph_relevance=0.85 if h.get("graph_neighbors") else 0.0,
+                metadata={"graph_neighbors": h.get("graph_neighbors", [])},
+            )
+            for h in hits
+        ]
