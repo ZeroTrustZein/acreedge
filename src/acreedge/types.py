@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -53,7 +53,7 @@ class CleanDeedRecord(BaseModel):
     deed_type: str = Field(default="DEED")
     book_page: Optional[str] = None
     is_arms_length: bool = Field(default=True, description="Arms-length transaction flag")
-    validated_at: datetime = Field(default_factory=datetime.utcnow)
+    validated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("parcel_id", mode="before")
     @classmethod
