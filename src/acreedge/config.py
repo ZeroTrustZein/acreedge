@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import List
+
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 

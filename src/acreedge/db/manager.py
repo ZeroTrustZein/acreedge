@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+
 from acreedge.config import DatabaseSettings
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,9 @@ class DatabaseManager:
     def connect(self) -> bool:
         """Establish connection pool (mockable in testing environments)."""
         self._connected = True
-        logger.info(f"Connected to PostgreSQL database at {self.settings.host}:{self.settings.port}")
+        logger.info(
+            f"Connected to PostgreSQL database at {self.settings.host}:{self.settings.port}"
+        )
         return True
 
     def disconnect(self) -> None:
@@ -40,7 +43,7 @@ class DatabaseManager:
         schema_sqls = [
             "CREATE EXTENSION IF NOT EXISTS vector;",
             "CREATE EXTENSION IF NOT EXISTS postgis;",
-            f"""
+            """
             CREATE TABLE IF NOT EXISTS parcel_embeddings (
                 id BIGSERIAL PRIMARY KEY,
                 parcel_id VARCHAR(64) UNIQUE NOT NULL,

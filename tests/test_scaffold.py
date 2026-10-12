@@ -3,28 +3,29 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+
 from click.testing import CliRunner
 
 from acreedge import __author__, __version__
-from acreedge.config import AcreEdgeSettings
+from acreedge.agents.orchestrator import SwarmOrchestrator, UnderwritingAgent
 from acreedge.cli import cli
+from acreedge.config import AcreEdgeSettings
 from acreedge.db.manager import DatabaseManager
 from acreedge.db.sql_validator import SQLRawExportValidator
 from acreedge.ingestion.pipeline import MunicipalDeedIngestionPipeline
 from acreedge.mcp.server import AcreEdgeMCPServer
-from acreedge.rag.engine import HybridRAGEngine
-from acreedge.valuation.engine import ValuationEngine
-from acreedge.agents.orchestrator import SwarmOrchestrator, UnderwritingAgent
 from acreedge.protocols import (
     DatabaseManagerProtocol,
-    RawExportValidatorProtocol,
-    MunicipalDeedIngestionProtocol,
-    MCPServerProtocol,
-    ValuationModelProtocol,
     HybridRAGProtocol,
+    MCPServerProtocol,
+    MunicipalDeedIngestionProtocol,
+    RawExportValidatorProtocol,
     SwarmAgentProtocol,
     SwarmOrchestratorProtocol,
+    ValuationModelProtocol,
 )
+from acreedge.rag.engine import HybridRAGEngine
+from acreedge.valuation.engine import ValuationEngine
 
 
 def test_package_metadata():

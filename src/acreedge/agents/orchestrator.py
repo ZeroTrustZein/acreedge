@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
+
 from acreedge.config import SwarmSettings
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ class SwarmOrchestrator:
         audit_results: List[Dict[str, Any]] = []
         context = {"parcel_id": parcel_id}
 
-        for role, agent in self._agents.items():
+        for _role, agent in self._agents.items():
             res = agent.execute_task(context)
             audit_results.append(res)
 

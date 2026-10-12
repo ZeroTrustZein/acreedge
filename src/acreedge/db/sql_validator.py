@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
 from acreedge.config import IngestionSettings
+from acreedge.types import (
+    CleanDeedRecord,
+    RawDeedRecord,
+    ValidationBatchResult,
+    ValidationError,
+)
 
 
 class SQLRawExportValidator:
@@ -42,12 +49,14 @@ CREATE TABLE IF NOT EXISTS {self.settings.clean_table} (
     CONSTRAINT chk_sale_price CHECK (sale_price >= {self.settings.min_sale_price})
 );
 
-CREATE INDEX IF NOT EXISTS idx_{self.settings.clean_table}_parcel_id ON {self.settings.clean_table}(parcel_id);
-CREATE INDEX IF NOT EXISTS idx_{self.settings.clean_table}_sale_date ON {self.settings.clean_table}(sale_date);
+CREATE INDEX IF NOT EXISTS idx_{self.settings.clean_table}_parcel
+    ON {self.settings.clean_table}(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_{self.settings.clean_table}_date
+    ON {self.settings.clean_table}(sale_date);
 """
 
     def generate_validation_sql(self) -> str:
-        """Pure PostgreSQL query to clean, cast, and validate raw staging records into clean table."""
+        """PostgreSQL query to clean, cast, and validate raw staging records into clean table."""
         return f"""
 INSERT INTO {self.settings.clean_table} (
     parcel_id,
@@ -68,7 +77,9 @@ SELECT
     COALESCE(TRIM(raw.deed_type), 'DEED') AS deed_type,
     TRIM(raw.book_page) AS book_page,
     CASE
-        WHEN CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) >= {self.settings.min_sale_price}
+        WHEN CAST(
+            REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)
+        ) >= {self.settings.min_sale_price}
              AND TRIM(UPPER(raw.grantor)) <> TRIM(UPPER(raw.grantee))
         THEN TRUE
         ELSE FALSE
@@ -80,7 +91,9 @@ WHERE
     AND raw.sale_date IS NOT NULL
     AND raw.sale_price_raw IS NOT NULL
     AND REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') ~ '^[0-9]+(\\.[0-9]+)?$'
-    AND CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) >= {self.settings.min_sale_price}
+    AND CAST(
+        REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)
+    ) >= {self.settings.min_sale_price}
 ON CONFLICT DO NOTHING;
 """
 
@@ -123,6 +136,57 @@ ON CONFLICT DO NOTHING;
             "book_page": str(record.get("book_page", "")).strip(),
             "is_arms_length": is_arms_length,
         }
+
+    def clean_to_model(
+        self, record: Union[Dict[str, Any], RawDeedRecord]
+    ) -> Optional[CleanDeedRecord]:
+        """Convert and validate raw input into a strongly typed CleanDeedRecord."""
+        raw_dict = record.model_dump() if isinstance(record, RawDeedRecord) else record
+        cleaned = self.clean_record(raw_dict)
+        if cleaned is None:
+            return None
+        try:
+            return CleanDeedRecord(**cleaned)
+        except Exception:
+            return None
+
+    def validate_batch_models(
+        self, records: List[Union[Dict[str, Any], RawDeedRecord]]
+    ) -> ValidationBatchResult:
+        """Validate batch returning structured ValidationBatchResult schema."""
+        valid_models: List[CleanDeedRecord] = []
+        errors: List[ValidationError] = []
+
+        for idx, rec in enumerate(records):
+            raw_dict = rec.model_dump() if isinstance(rec, RawDeedRecord) else rec
+            cleaned = self.clean_to_model(raw_dict)
+            if cleaned is not None:
+                valid_models.append(cleaned)
+            else:
+                p_id = str(raw_dict.get("parcel_id", ""))
+                errors.append(
+                    ValidationError(
+                        record_index=idx,
+                        parcel_id=p_id or None,
+                        field="record",
+                        message="Failed validation criteria or minimum sale price threshold",
+                        raw_value=raw_dict,
+                    )
+                )
+
+        total = len(records)
+        valid_count = len(valid_models)
+        rejected_count = len(errors)
+        pass_rate = round(valid_count / total, 4) if total > 0 else 0.0
+
+        return ValidationBatchResult(
+            total_records=total,
+            valid_records=valid_count,
+            rejected_records=rejected_count,
+            pass_rate=pass_rate,
+            errors=errors,
+            cleaned_records=valid_models,
+        )
 
     def validate_batch(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Validate and clean an in-memory batch of raw deed records."""

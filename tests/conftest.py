@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List
+
 import pytest
 
+from acreedge.agents.orchestrator import SwarmOrchestrator
 from acreedge.config import AcreEdgeSettings
 from acreedge.db.manager import DatabaseManager
 from acreedge.mcp.server import AcreEdgeMCPServer
 from acreedge.valuation.engine import ValuationEngine
-from acreedge.agents.orchestrator import SwarmOrchestrator
 
 
 @pytest.fixture

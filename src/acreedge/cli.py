@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+
 import click
 from rich.console import Console
 
@@ -31,10 +32,13 @@ def info_cmd() -> None:
     settings = AcreEdgeSettings()
     console.print("[bold green]=== AcreEdge System Summary ===[/bold green]")
     console.print(f"Environment: [yellow]{settings.environment}[/yellow]")
-    console.print(f"PostgreSQL DB: [cyan]{settings.db.name}[/cyan] ({settings.db.host}:{settings.db.port})")
+    db_info = f"{settings.db.host}:{settings.db.port}"
+    console.print(f"PostgreSQL DB: [cyan]{settings.db.name}[/cyan] ({db_info})")
     console.print(f"MCP Server Port: [cyan]{settings.mcp.port}[/cyan]")
     console.print(f"Vector Dimension: [magenta]{settings.rag.vector_dim}[/magenta]")
-    console.print(f"Underwriting Swarm Agents: [blue]{len(settings.swarm.roles)}[/blue] configured")
+    agent_count = len(settings.swarm.roles)
+    console.print(f"Underwriting Swarm Agents: [blue]{agent_count}[/blue] configured")
+
 
 
 @cli.command("validate-config")
@@ -50,7 +54,7 @@ def generate_sql_cmd() -> None:
     validator = SQLRawExportValidator()
     ddl = validator.generate_schema_ddl()
     sql = validator.generate_validation_sql()
-    console.print("[bold yellow]-- AcreEdge PostgreSQL Cleanup & Validation Script --[/bold yellow]")
+    console.print("[bold yellow]-- PostgreSQL Cleanup & Validation Script --[/bold yellow]")
     console.print(ddl)
     console.print(sql)
 
