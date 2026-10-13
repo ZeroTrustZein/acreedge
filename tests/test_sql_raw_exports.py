@@ -1,4 +1,4 @@
-"""Stage 6/10: Comprehensive test suite for SQL-based raw deed export cleaning and validation on PostgreSQL.
+"""Stage 6/10: Test suite for SQL deed export cleaning and validation on PostgreSQL.
 
 Tests PostgreSQL DDL generation, data transformation queries, quarantine isolation,
 audit reporting, PostGIS spatial queries, and Python in-memory validation edge cases.
@@ -6,18 +6,12 @@ audit reporting, PostGIS spatial queries, and Python in-memory validation edge c
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List
-
-import pytest
-
 from acreedge.config import IngestionSettings
 from acreedge.db.sql_validator import SQLRawExportValidator
 from acreedge.types import (
     CleanDeedRecord,
     RawDeedRecord,
     ValidationBatchResult,
-    ValidationError,
 )
 
 
@@ -85,7 +79,10 @@ def test_sql_validator_validation_sql_syntax():
     assert "TRIM(COALESCE(raw.grantee, 'UNKNOWN')) AS grantee" in sql
     assert "CAST(raw.sale_date AS DATE) AS sale_date" in sql
     assert "REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g')" in sql
-    assert "CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') AS NUMERIC(14,2)) AS sale_price" in sql
+    assert (
+        "CAST(REGEXP_REPLACE(raw.sale_price_raw, '[^0-9.]', '', 'g') "
+        "AS NUMERIC(14,2)) AS sale_price" in sql
+    )
     assert "COALESCE(TRIM(raw.deed_type), 'DEED') AS deed_type" in sql
     assert "TRIM(raw.book_page) AS book_page" in sql
     assert ">= 100.0" in sql
@@ -101,10 +98,16 @@ def test_sql_validator_quarantine_sql_reasons():
     assert "INSERT INTO quarantined_deeds" in sql
     assert "WHEN raw.parcel_id IS NULL OR TRIM(raw.parcel_id) = '' THEN 'MISSING_PARCEL_ID'" in sql
     assert "WHEN raw.sale_date IS NULL OR TRIM(raw.sale_date) = '' THEN 'MISSING_SALE_DATE'" in sql
-    assert "WHEN raw.sale_price_raw IS NULL OR TRIM(raw.sale_price_raw) = '' THEN 'MISSING_SALE_PRICE'" in sql
+    assert (
+        "WHEN raw.sale_price_raw IS NULL OR TRIM(raw.sale_price_raw) = '' THEN 'MISSING_SALE_PRICE'"
+        in sql
+    )
     assert "THEN 'INVALID_PRICE_FORMAT'" in sql
     assert "THEN 'PRICE_BELOW_MINIMUM'" in sql
-    assert "WHEN TRIM(UPPER(raw.grantor)) = TRIM(UPPER(raw.grantee)) THEN 'NON_ARMS_LENGTH_TRANSFER'" in sql
+    assert (
+        "WHEN TRIM(UPPER(raw.grantor)) = TRIM(UPPER(raw.grantee)) THEN 'NON_ARMS_LENGTH_TRANSFER'"
+        in sql
+    )
     assert "ELSE 'VALIDATION_FAILED'" in sql
     assert "TO_JSONB(raw) AS raw_payload" in sql
 

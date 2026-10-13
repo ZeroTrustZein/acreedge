@@ -107,13 +107,20 @@ def test_cli_generate_sql_kinds(runner: CliRunner):
 
 
 def test_cli_clean_export_sample(runner: CliRunner):
-    """Verify clean-export command with default sample deeds."""
+    """Verify clean-export command with default sample deeds and min-price override."""
     res = runner.invoke(cli, ["clean-export"])
     assert res.exit_code == 0
     assert "Deed Export Validation Batch" in res.output
     assert "Total Records: 4" in res.output
     assert "Valid Arm's-Length: 2" in res.output
     assert "100-204-55A" in res.output
+
+    # Test with min-price option
+    res_min = runner.invoke(cli, ["clean-export", "--min-price", "5000000.0"])
+    assert res_min.exit_code == 0
+    assert "Total Records: 4" in res_min.output
+    # When min-price is 5M, fewer records pass
+    assert "Valid Arm's-Length: 0" in res_min.output
 
 
 def test_cli_clean_export_json_and_custom_file(runner: CliRunner, tmp_path: Path):
@@ -218,6 +225,23 @@ def test_cli_valuation(runner: CliRunner):
     dcf_data = json.loads(res_dcf.output)
     assert dcf_data["dcf_valuation"] > 0
 
+    # Standalone property value and sqft calculation
+    res_pv = runner.invoke(
+        cli,
+        [
+            "valuation",
+            "--property-value",
+            "600000",
+            "--square-feet",
+            "3000",
+            "--json-output",
+        ],
+    )
+    assert res_pv.exit_code == 0
+    pv_data = json.loads(res_pv.output)
+    assert pv_data["property_value"] == 600000.0
+    assert pv_data["value_per_sqft"] == 200.0
+
 
 def test_cli_underwrite(runner: CliRunner):
     """Verify underwriting due diligence command."""
@@ -264,10 +288,15 @@ def test_cli_db_init(runner: CliRunner):
 
 
 def test_cli_serve_mcp(runner: CliRunner):
-    """Verify MCP server inspection and start dry-run."""
+    """Verify MCP server inspection and start."""
     res = runner.invoke(cli, ["serve-mcp", "--dry-run"])
     assert res.exit_code == 0
     assert "AcreEdge Model Context Protocol" in res.output
     assert "calculate_valuation" in res.output
     assert "query_validated_deeds" in res.output
     assert "underwrite_property" in res.output
+
+    # Test non-dry-run start (invokes server.start())
+    res_start = runner.invoke(cli, ["serve-mcp"])
+    assert res_start.exit_code == 0
+    assert "MCP Server running." in res_start.output

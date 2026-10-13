@@ -228,8 +228,9 @@ def test_valuation_engine_dcf_invalid_discount():
 
 def test_swarm_orchestrator_rejection_flow(default_settings: AcreEdgeSettings):
     """Verify SwarmOrchestrator handles non-APPROVED agent evaluations."""
-    from acreedge.agents.orchestrator import SwarmOrchestrator
     from unittest.mock import MagicMock
+
+    from acreedge.agents.orchestrator import SwarmOrchestrator
 
     orchestrator = SwarmOrchestrator(default_settings.swarm)
     # Mock one agent to return REJECTED
