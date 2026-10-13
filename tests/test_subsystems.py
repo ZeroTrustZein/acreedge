@@ -245,4 +245,3 @@ def test_swarm_orchestrator_rejection_flow(default_settings: AcreEdgeSettings):
     report = orchestrator.run_due_diligence_report("PARCEL-RISK")
     assert report.status == UnderwritingStatus.REJECTED
     assert report.overall_risk_score == 75.0
-

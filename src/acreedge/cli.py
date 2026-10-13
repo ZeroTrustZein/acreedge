@@ -118,9 +118,7 @@ def generate_sql_cmd(kind: str, lat: float, lon: float, radius: float) -> None:
         click.echo(validator.build_pipeline_sql())
     elif kind == "spatial":
         click.echo(
-            validator.generate_spatial_comps_sql(
-                latitude=lat, longitude=lon, radius_miles=radius
-            )
+            validator.generate_spatial_comps_sql(latitude=lat, longitude=lon, radius_miles=radius)
         )
     else:
         ddl = validator.generate_schema_ddl()
